@@ -54,26 +54,47 @@ const SUPABASE_URL = 'https://quokvfzfkwqwzuznzpgi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1b2t2Znpma3dxd3p1em56cGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIzNDUxMDcsImV4cCI6MjA1NzkyMTEwN30.bM06cFhEFJVYLfKNfOsMk5Z4VbbPOCkBMSV3RqfXnwg';
 
 // 解析 URL hash 参数
-const hash = window.location.hash.substring(1);
-const params = {};
-hash.split('&').forEach(part => {
-  const idx = part.indexOf('=');
-  if (idx > 0) {
-    params[decodeURIComponent(part.substring(0, idx))] = decodeURIComponent(part.substring(idx + 1));
-  }
-});
+function getHashParams() {
+  const hash = window.location.hash.substring(1);
+  const params = {};
+  hash.split('&').forEach(part => {
+    const idx = part.indexOf('=');
+    if (idx > 0) {
+      params[decodeURIComponent(part.substring(0, idx))] = decodeURIComponent(part.substring(idx + 1));
+    }
+  });
+  return params;
+}
 
+const params = getHashParams();
 const type = params.type || '';
+const accessToken = params.access_token || '';
+const refreshToken = params.refresh_token || '';
 
-// 立即根据 type 显示对应 UI
+// 立即显示 UI
 if (type === 'recovery') {
   document.getElementById('reset').classList.remove('hidden');
 } else {
   document.getElementById('verified').classList.remove('hidden');
 }
 
-// 初始化 Supabase 客户端（会自动从 URL hash 恢复 session）
+// 初始化 Supabase 客户端
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 如果有 token，立即建立 session
+let sessionReady = false;
+if (accessToken && refreshToken) {
+  sb.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken
+  }).then(({ error }) => {
+    if (error) {
+      console.error('Session error:', error.message);
+    } else {
+      sessionReady = true;
+    }
+  });
+}
 
 // 重置密码
 async function doReset() {
@@ -93,7 +114,21 @@ async function doReset() {
   btn.disabled = true;
   btn.textContent = 'Updating...';
 
-  // 使用 Supabase SDK 更新密码
+  // 如果 session 还没建立，等一下再试
+  if (!sessionReady && accessToken && refreshToken) {
+    const { error: sessErr } = await sb.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken
+    });
+    if (sessErr) {
+      showMsg('Session error: ' + sessErr.message + '. The link may have expired, please request a new one.', true);
+      btn.disabled = false;
+      btn.textContent = 'Set New Password';
+      return;
+    }
+  }
+
+  // 更新密码
   const { data, error } = await sb.auth.updateUser({ password: pw });
 
   if (error) {
