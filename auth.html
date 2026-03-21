@@ -12,7 +12,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(1
 h1{font-size:22px;margin-bottom:8px;font-weight:600}
 p{color:rgba(255,255,255,.65);font-size:14px;line-height:1.6;margin-bottom:16px}
 .hint{padding:10px 16px;background:rgba(80,200,120,.12);border-radius:10px;font-size:13px;color:rgba(255,255,255,.8)}
-.error{padding:10px 16px;background:rgba(220,60,60,.15);border-radius:10px;font-size:13px;color:#ff9090}
+.error{padding:10px 16px;background:rgba(220,60,60,.15);border-radius:10px;font-size:13px;color:#ff9090;word-break:break-all}
 .success{padding:10px 16px;background:rgba(80,200,120,.15);border-radius:10px;font-size:13px;color:#90ff90}
 input{width:100%;padding:10px 14px;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:rgba(255,255,255,.08);color:#fff;font-size:14px;outline:none;margin-bottom:12px}
 input:focus{border-color:rgba(100,180,255,.5)}
@@ -23,6 +23,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .hidden{display:none}
 .brand{font-size:12px;color:rgba(255,255,255,.3);margin-top:20px}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 <div class="card">
@@ -45,7 +46,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
     <div id="msg" class="hidden" style="margin-top:12px"></div>
   </div>
 
-  <!-- Loading / Fallback -->
+  <!-- Loading -->
   <div id="loading">
     <div class="icon">&#9203;</div>
     <h1>Processing...</h1>
@@ -59,93 +60,70 @@ button:disabled{opacity:.5;cursor:not-allowed}
 const SUPABASE_URL = 'https://quokvfzfkwqwzuznzpgi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1b2t2Znpma3dxd3p1em56cGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIzNDUxMDcsImV4cCI6MjA1NzkyMTEwN30.bM06cFhEFJVYLfKNfOsMk5Z4VbbPOCkBMSV3RqfXnwg';
 
-let accessToken = '';
+// 使用 Supabase 官方客户端库
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Parse URL hash parameters
-function getHashParams() {
-  const hash = window.location.hash.substring(1);
-  const params = {};
-  hash.split('&').forEach(part => {
-    const [key, val] = part.split('=');
-    if (key) params[decodeURIComponent(key)] = decodeURIComponent(val || '');
-  });
-  return params;
-}
+let isRecovery = false;
 
-// Initialize page based on URL params
-function init() {
-  const params = getHashParams();
-  const type = params.type || '';
-  accessToken = params.access_token || '';
-
+// 监听认证状态变化
+supabase.auth.onAuthStateChange((event, session) => {
   document.getElementById('loading').classList.add('hidden');
 
-  if (type === 'recovery') {
-    // Password reset flow
+  if (event === 'PASSWORD_RECOVERY') {
+    // 密码重置流程
+    isRecovery = true;
     document.getElementById('reset').classList.remove('hidden');
-  } else if (type === 'signup' || type === 'email_change' || type === 'magiclink') {
-    // Email verification
+    document.getElementById('verified').classList.add('hidden');
+  } else if (event === 'SIGNED_IN' && !isRecovery) {
+    // 邮箱验证成功
     document.getElementById('verified').classList.remove('hidden');
-  } else if (accessToken) {
-    // Has token but unknown type - show verified
-    document.getElementById('verified').classList.remove('hidden');
-  } else {
-    // Direct access without params
+  } else if (event === 'USER_UPDATED') {
+    // 密码已更新
+    showMsg('Password updated successfully! Please return to Maliang and log in.', false);
+    document.getElementById('resetbtn').classList.add('hidden');
+    document.getElementById('newpw').classList.add('hidden');
+    document.getElementById('confirmpw').classList.add('hidden');
+  }
+});
+
+// 超时后如果没有事件，显示默认页面
+setTimeout(() => {
+  const loading = document.getElementById('loading');
+  if (!loading.classList.contains('hidden')) {
+    loading.classList.add('hidden');
     document.getElementById('verified').classList.remove('hidden');
   }
-}
+}, 3000);
 
-// Handle password reset
+// 重置密码
 async function doReset() {
   const pw = document.getElementById('newpw').value;
-  const confirm = document.getElementById('confirmpw').value;
-  const msgEl = document.getElementById('msg');
+  const confirmPw = document.getElementById('confirmpw').value;
   const btn = document.getElementById('resetbtn');
 
   if (pw.length < 6) {
     showMsg('Password must be at least 6 characters.', true);
     return;
   }
-  if (pw !== confirm) {
+  if (pw !== confirmPw) {
     showMsg('Passwords do not match.', true);
-    return;
-  }
-  if (!accessToken) {
-    showMsg('Invalid reset link. Please request a new one.', true);
     return;
   }
 
   btn.disabled = true;
   btn.textContent = 'Updating...';
 
-  try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'apikey': SUPABASE_ANON_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ password: pw })
-    });
+  const { data, error } = await supabase.auth.updateUser({ password: pw });
 
-    const data = await res.json();
-
-    if (res.ok) {
-      showMsg('Password updated successfully! Please return to Maliang and log in.', false);
-      btn.classList.add('hidden');
-      document.getElementById('newpw').classList.add('hidden');
-      document.getElementById('confirmpw').classList.add('hidden');
-    } else {
-      const errMsg = data.msg || data.error_description || data.message || data.error || JSON.stringify(data);
-      showMsg(`Error ${res.status}: ${errMsg}`, true);
-      btn.disabled = false;
-      btn.textContent = 'Set New Password';
-    }
-  } catch (e) {
-    showMsg('Network error: ' + e.message, true);
+  if (error) {
+    showMsg('Error: ' + error.message, true);
     btn.disabled = false;
     btn.textContent = 'Set New Password';
+  } else {
+    showMsg('Password updated successfully! Please return to Maliang and log in.', false);
+    btn.classList.add('hidden');
+    document.getElementById('newpw').classList.add('hidden');
+    document.getElementById('confirmpw').classList.add('hidden');
   }
 }
 
@@ -155,8 +133,6 @@ function showMsg(text, isError) {
   el.textContent = text;
   el.classList.remove('hidden');
 }
-
-init();
 </script>
 </body>
 </html>
