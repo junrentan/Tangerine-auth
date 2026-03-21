@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maliang - Account</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
+.card{background:rgba(255,255,255,.06);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:40px;text-align:center;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.icon{font-size:56px;margin-bottom:12px}
+h1{font-size:22px;margin-bottom:8px;font-weight:600}
+p{color:rgba(255,255,255,.65);font-size:14px;line-height:1.6;margin-bottom:16px}
+.hint{padding:10px 16px;background:rgba(80,200,120,.12);border-radius:10px;font-size:13px;color:rgba(255,255,255,.8)}
+.error{padding:10px 16px;background:rgba(220,60,60,.15);border-radius:10px;font-size:13px;color:#ff9090}
+.success{padding:10px 16px;background:rgba(80,200,120,.15);border-radius:10px;font-size:13px;color:#90ff90}
+input{width:100%;padding:10px 14px;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:rgba(255,255,255,.08);color:#fff;font-size:14px;outline:none;margin-bottom:12px}
+input:focus{border-color:rgba(100,180,255,.5)}
+input::placeholder{color:rgba(255,255,255,.35)}
+button{width:100%;padding:10px;border:none;border-radius:8px;background:linear-gradient(135deg,#2d6a9f,#1e4d7b);color:#fff;font-size:14px;cursor:pointer;transition:opacity .2s}
+button:hover{opacity:.85}
+button:disabled{opacity:.5;cursor:not-allowed}
+.hidden{display:none}
+.brand{font-size:12px;color:rgba(255,255,255,.3);margin-top:20px}
+</style>
+</head>
+<body>
+<div class="card">
+  <!-- Email Verified -->
+  <div id="verified" class="hidden">
+    <div class="icon">&#10004;</div>
+    <h1>Email Verified!</h1>
+    <p>Your email has been successfully verified.</p>
+    <div class="hint">Please return to <b>Maliang</b> and log in with your email and password.</div>
+  </div>
+
+  <!-- Password Reset Form -->
+  <div id="reset" class="hidden">
+    <div class="icon">&#128274;</div>
+    <h1>Reset Password</h1>
+    <p>Enter your new password below.</p>
+    <input type="password" id="newpw" placeholder="New password (min 6 characters)" minlength="6">
+    <input type="password" id="confirmpw" placeholder="Confirm new password" minlength="6">
+    <button id="resetbtn" onclick="doReset()">Set New Password</button>
+    <div id="msg" class="hidden" style="margin-top:12px"></div>
+  </div>
+
+  <!-- Loading / Fallback -->
+  <div id="loading">
+    <div class="icon">&#9203;</div>
+    <h1>Processing...</h1>
+    <p>Please wait.</p>
+  </div>
+
+  <div class="brand">Maliang &copy; 2026</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://quokvfzfkwqwzuznzpgi.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1b2t2Znpma3dxd3p1em56cGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIzNDUxMDcsImV4cCI6MjA1NzkyMTEwN30.bM06cFhEFJVYLfKNfOsMk5Z4VbbPOCkBMSV3RqfXnwg';
+
+let accessToken = '';
+
+// Parse URL hash parameters
+function getHashParams() {
+  const hash = window.location.hash.substring(1);
+  const params = {};
+  hash.split('&').forEach(part => {
+    const [key, val] = part.split('=');
+    if (key) params[decodeURIComponent(key)] = decodeURIComponent(val || '');
+  });
+  return params;
+}
+
+// Initialize page based on URL params
+function init() {
+  const params = getHashParams();
+  const type = params.type || '';
+  accessToken = params.access_token || '';
+
+  document.getElementById('loading').classList.add('hidden');
+
+  if (type === 'recovery') {
+    // Password reset flow
+    document.getElementById('reset').classList.remove('hidden');
+  } else if (type === 'signup' || type === 'email_change' || type === 'magiclink') {
+    // Email verification
+    document.getElementById('verified').classList.remove('hidden');
+  } else if (accessToken) {
+    // Has token but unknown type - show verified
+    document.getElementById('verified').classList.remove('hidden');
+  } else {
+    // Direct access without params
+    document.getElementById('verified').classList.remove('hidden');
+  }
+}
+
+// Handle password reset
+async function doReset() {
+  const pw = document.getElementById('newpw').value;
+  const confirm = document.getElementById('confirmpw').value;
+  const msgEl = document.getElementById('msg');
+  const btn = document.getElementById('resetbtn');
+
+  if (pw.length < 6) {
+    showMsg('Password must be at least 6 characters.', true);
+    return;
+  }
+  if (pw !== confirm) {
+    showMsg('Passwords do not match.', true);
+    return;
+  }
+  if (!accessToken) {
+    showMsg('Invalid reset link. Please request a new one.', true);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Updating...';
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ password: pw })
+    });
+
+    if (res.ok) {
+      showMsg('Password updated successfully! Please return to Maliang and log in.', false);
+      btn.classList.add('hidden');
+      document.getElementById('newpw').classList.add('hidden');
+      document.getElementById('confirmpw').classList.add('hidden');
+    } else {
+      const data = await res.json();
+      showMsg(data.msg || data.error_description || 'Failed to update password.', true);
+      btn.disabled = false;
+      btn.textContent = 'Set New Password';
+    }
+  } catch (e) {
+    showMsg('Network error. Please try again.', true);
+    btn.disabled = false;
+    btn.textContent = 'Set New Password';
+  }
+}
+
+function showMsg(text, isError) {
+  const el = document.getElementById('msg');
+  el.className = isError ? 'error' : 'success';
+  el.textContent = text;
+  el.classList.remove('hidden');
+}
+
+init();
+</script>
+</body>
+</html>
