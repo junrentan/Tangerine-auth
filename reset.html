@@ -48,6 +48,22 @@ button:disabled{opacity:.5;cursor:not-allowed}
     <div id="msg" class="hidden" style="margin-top:12px"></div>
   </div>
 
+  <!-- 充值成功 -->
+  <div id="topup_success" class="hidden">
+    <div class="icon">&#127881;</div>
+    <h1>Payment Successful!</h1>
+    <p>Your credits have been added to your Maliang account.</p>
+    <div class="hint">Please return to <b>Maliang</b> and click the <b>🔄 Refresh</b> button to see your updated balance.</div>
+  </div>
+
+  <!-- 充值取消 -->
+  <div id="topup_cancelled" class="hidden">
+    <div class="icon">&#10060;</div>
+    <h1>Payment Cancelled</h1>
+    <p>Your payment was cancelled. No charges were made.</p>
+    <div class="hint">You can return to <b>Maliang</b> and try again anytime.</div>
+  </div>
+
   <div class="brand">Maliang &copy; 2026</div>
 </div>
 
@@ -67,9 +83,13 @@ hash.split('&').forEach(function(part) {
 var type = params.type || '';
 var accessToken = params.access_token || '';
 
-// 立即显示 UI
+// 立即显示对应的 UI
 if (type === 'recovery') {
   document.getElementById('reset').classList.remove('hidden');
+} else if (type === 'topup_success') {
+  document.getElementById('topup_success').classList.remove('hidden');
+} else if (type === 'topup_cancelled') {
+  document.getElementById('topup_cancelled').classList.remove('hidden');
 } else {
   document.getElementById('verified').classList.remove('hidden');
 }
