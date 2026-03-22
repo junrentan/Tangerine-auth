@@ -52,8 +52,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </div>
 
 <script>
-var SUPABASE_URL = 'https://quokvfzfkwqwzuznzpgi.supabase.co';
-var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1b2t2Znpma3dxd3p1em56cGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMjE0MDIsImV4cCI6MjA4OTY5NzQwMn0.XB74uoMuSasnTgGooEebM7BRRiHn13-aIYFC-oJ3fDo';
+var EDGE_FN_URL = 'https://quokvfzfkwqwzuznzpgi.supabase.co/functions/v1/reset-password';
 
 // 解析 URL hash
 var hash = window.location.hash.substring(1);
@@ -75,7 +74,7 @@ if (type === 'recovery') {
   document.getElementById('verified').classList.remove('hidden');
 }
 
-// 重置密码 - 直接用 REST API
+// 重置密码 - 通过 Edge Function 处理
 function doReset() {
   var pw = document.getElementById('newpw').value;
   var confirmPw = document.getElementById('confirmpw').value;
@@ -98,25 +97,24 @@ function doReset() {
   btn.textContent = 'Updating...';
 
   var xhr = new XMLHttpRequest();
-  xhr.open('PUT', SUPABASE_URL + '/auth/v1/user');
-  xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-  xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
+  xhr.open('POST', EDGE_FN_URL);
   xhr.setRequestHeader('Content-Type', 'application/json');
 
   xhr.onload = function() {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      showMsg('Password updated successfully! Please return to Maliang and log in.', false);
-      btn.style.display = 'none';
-      document.getElementById('newpw').style.display = 'none';
-      document.getElementById('confirmpw').style.display = 'none';
-    } else {
-      try {
-        var data = JSON.parse(xhr.responseText);
-        var errMsg = data.msg || data.error_description || data.message || data.error || xhr.responseText;
-        showMsg('Error ' + xhr.status + ': ' + errMsg, true);
-      } catch(e) {
-        showMsg('Error ' + xhr.status + ': ' + xhr.responseText, true);
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        showMsg('Password updated successfully! Please return to Maliang and log in.', false);
+        btn.style.display = 'none';
+        document.getElementById('newpw').style.display = 'none';
+        document.getElementById('confirmpw').style.display = 'none';
+      } else {
+        showMsg('Error: ' + (data.error || xhr.responseText), true);
+        btn.disabled = false;
+        btn.textContent = 'Set New Password';
       }
+    } catch(e) {
+      showMsg('Error: ' + xhr.responseText, true);
       btn.disabled = false;
       btn.textContent = 'Set New Password';
     }
@@ -128,7 +126,10 @@ function doReset() {
     btn.textContent = 'Set New Password';
   };
 
-  xhr.send(JSON.stringify({ password: pw }));
+  xhr.send(JSON.stringify({
+    access_token: accessToken,
+    new_password: pw
+  }));
 }
 
 function showMsg(text, isError) {
